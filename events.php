@@ -36,7 +36,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['event_id']) && isset($
     }
     
     // Get current RSVP count
-    $stmt = $pdo->prepare("SELECT COUNT(*) FROM rsvps WHERE event_id = ? AND status = 'attending'");
+    $stmt = $pdo->prepare("SELECT COUNT(*) FROM rsvps WHERE event_id = ? AND status = 'confirmed'");
     $stmt->execute([$event_id]);
     $current_rsvps = $stmt->fetchColumn();
     
@@ -49,11 +49,11 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['event_id']) && isset($
     try {
         if ($existing_rsvp) {
             // Update existing RSVP
-            $stmt = $pdo->prepare("UPDATE rsvps SET status = 'attending' WHERE id = ?");
+            $stmt = $pdo->prepare("UPDATE rsvps SET status = 'confirmed' WHERE id = ?");
             $stmt->execute([$existing_rsvp['id']]);
         } else {
             // Create new RSVP
-            $stmt = $pdo->prepare("INSERT INTO rsvps (event_id, user_id, status) VALUES (?, ?, 'attending')");
+            $stmt = $pdo->prepare("INSERT INTO rsvps (event_id, user_id, status) VALUES (?, ?, 'confirmed')");
             $stmt->execute([$event_id, $user_id]);
         }
         
@@ -111,57 +111,87 @@ $events = $stmt->fetchAll();
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Events - EventHub</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <link rel="stylesheet" href="assets/css/style.css">
 </head>
 <body>
     <?php include 'includes/navbar.php'; ?>
     
     <div class="container my-5">
-        <h2 class="text-center mb-4">Upcoming Events</h2>
-        
-        <?php if (isset($_SESSION['success'])): ?>
-            <div class="alert alert-success">
-                <?php 
-                echo $_SESSION['success'];
-                unset($_SESSION['success']);
-                ?>
+        <div class="row mb-4">
+            <div class="col-12">
+                <h2 class="text-center mb-4 animate-fade-in">Upcoming Events</h2>
+                
+                <?php if (isset($_SESSION['success'])): ?>
+                    <div class="alert alert-success animate-fade-in">
+                        <i class="fas fa-check-circle me-2"></i>
+                        <?php 
+                        echo $_SESSION['success'];
+                        unset($_SESSION['success']);
+                        ?>
+                    </div>
+                <?php endif; ?>
+                
+                <?php if (isset($_SESSION['error'])): ?>
+                    <div class="alert alert-danger animate-fade-in">
+                        <i class="fas fa-exclamation-circle me-2"></i>
+                        <?php 
+                        echo $_SESSION['error'];
+                        unset($_SESSION['error']);
+                        ?>
+                    </div>
+                <?php endif; ?>
             </div>
-        <?php endif; ?>
-        
-        <?php if (isset($_SESSION['error'])): ?>
-            <div class="alert alert-danger">
-                <?php 
-                echo $_SESSION['error'];
-                unset($_SESSION['error']);
-                ?>
-            </div>
-        <?php endif; ?>
+        </div>
         
         <div class="row">
             <?php foreach ($events as $event): ?>
                 <div class="col-md-4 mb-4">
-                    <div class="card h-100 animate__animated animate__fadeIn">
+                    <div class="card h-100 animate-fade-in">
                         <div class="card-body">
-                            <h5 class="card-title"><?php echo htmlspecialchars($event['title']); ?></h5>
-                            <p class="card-text"><?php echo htmlspecialchars($event['description']); ?></p>
-                            <p class="card-text">
-                                <small class="text-muted">
-                                    <strong>Date:</strong> <?php echo date('F j, Y', strtotime($event['date'])); ?><br>
-                                    <strong>Time:</strong> <?php echo date('g:i A', strtotime($event['time'])); ?><br>
-                                    <strong>Location:</strong> <?php echo htmlspecialchars($event['location']); ?><br>
-                                    <strong>Organizer:</strong> <?php echo htmlspecialchars($event['manager_name']); ?><br>
-                                    <strong>Capacity:</strong> <?php echo $event['rsvp_count']; ?>/<?php echo $event['capacity']; ?>
-                                </small>
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <h5 class="card-title mb-0"><?php echo htmlspecialchars($event['title']); ?></h5>
+                                <span class="status-badge status-<?php echo strtolower($event['status'] ?? 'pending'); ?>">
+                                    <?php echo ucfirst($event['status'] ?? 'Pending'); ?>
+                                </span>
+                            </div>
+                            
+                            <p class="card-text text-muted mb-3">
+                                <i class="fas fa-calendar-alt me-2"></i>
+                                <?php echo date('F j, Y', strtotime($event['date'])); ?>
                             </p>
-                            <?php if (isset($_SESSION['user_id']) && $_SESSION['role'] == 'attendant'): ?>
-                                <form method="POST" action="">
-                                    <input type="hidden" name="event_id" value="<?php echo $event['id']; ?>">
-                                    <button type="submit" class="btn btn-primary w-100" <?php echo $event['rsvp_count'] >= $event['capacity'] ? 'disabled' : ''; ?>>
-                                        <?php echo $event['rsvp_count'] >= $event['capacity'] ? 'Full' : 'RSVP'; ?>
-                                    </button>
-                                </form>
-                            <?php endif; ?>
+                            
+                            <p class="card-text text-muted mb-3">
+                                <i class="fas fa-clock me-2"></i>
+                                <?php echo date('g:i A', strtotime($event['time'])); ?>
+                            </p>
+                            
+                            <p class="card-text text-muted mb-3">
+                                <i class="fas fa-map-marker-alt me-2"></i>
+                                <?php echo htmlspecialchars($event['location']); ?>
+                            </p>
+                            
+                            <p class="card-text mb-4">
+                                <?php echo htmlspecialchars($event['description']); ?>
+                            </p>
+                            
+                            <div class="d-flex justify-content-between align-items-center">
+                                <div class="text-muted">
+                                    <i class="fas fa-users me-2"></i>
+                                    <?php echo $event['rsvp_count']; ?>/<?php echo $event['capacity']; ?> spots
+                                </div>
+                                
+                                <?php if (isset($_SESSION['user_id']) && $_SESSION['role'] == 'attendant'): ?>
+                                    <form method="POST" action="" class="mb-0">
+                                        <input type="hidden" name="event_id" value="<?php echo $event['id']; ?>">
+                                        <button type="submit" class="btn btn-primary" 
+                                            <?php echo $event['rsvp_count'] >= $event['capacity'] ? 'disabled' : ''; ?>>
+                                            <i class="fas fa-check-circle me-2"></i>
+                                            <?php echo $event['rsvp_count'] >= $event['capacity'] ? 'Full' : 'RSVP'; ?>
+                                        </button>
+                                    </form>
+                                <?php endif; ?>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -171,5 +201,6 @@ $events = $stmt->fetchAll();
     
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="assets/js/main.js"></script>
+    <?php include 'includes/footer.php'; ?>
 </body>
 </html> 

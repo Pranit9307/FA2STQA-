@@ -60,7 +60,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_SESSION['user_id'])) {
     $status = $_POST['rsvp_status'];
     
     // Validate RSVP status
-    $valid_statuses = ['attending', 'maybe', 'not_attending'];
+    $valid_statuses = ['confirmed', 'pending', 'cancelled'];
     if (!in_array($status, $valid_statuses)) {
         $_SESSION['error'] = "Invalid RSVP status";
         header("Location: event_details.php?id=" . $event_id);
@@ -185,19 +185,19 @@ if (isset($_SESSION['user_id'])) {
                                     <form method="POST">
                                         <input type="hidden" name="csrf_token" value="<?php echo $_SESSION['csrf_token']; ?>">
                                         <div class="form-check mb-2">
-                                            <input class="form-check-input" type="radio" name="rsvp_status" value="attending" 
-                                                <?php echo ($user_rsvp && $user_rsvp['status'] === 'attending') ? 'checked' : ''; ?>>
-                                            <label class="form-check-label">Attending</label>
+                                            <input class="form-check-input" type="radio" name="rsvp_status" value="confirmed" 
+                                                <?php echo ($user_rsvp && $user_rsvp['status'] === 'confirmed') ? 'checked' : ''; ?>>
+                                            <label class="form-check-label">Confirmed</label>
                                         </div>
                                         <div class="form-check mb-2">
-                                            <input class="form-check-input" type="radio" name="rsvp_status" value="maybe"
-                                                <?php echo ($user_rsvp && $user_rsvp['status'] === 'maybe') ? 'checked' : ''; ?>>
-                                            <label class="form-check-label">Maybe</label>
+                                            <input class="form-check-input" type="radio" name="rsvp_status" value="pending"
+                                                <?php echo ($user_rsvp && $user_rsvp['status'] === 'pending') ? 'checked' : ''; ?>>
+                                            <label class="form-check-label">Pending</label>
                                         </div>
                                         <div class="form-check mb-3">
-                                            <input class="form-check-input" type="radio" name="rsvp_status" value="not_attending"
-                                                <?php echo ($user_rsvp && $user_rsvp['status'] === 'not_attending') ? 'checked' : ''; ?>>
-                                            <label class="form-check-label">Not Attending</label>
+                                            <input class="form-check-input" type="radio" name="rsvp_status" value="cancelled"
+                                                <?php echo ($user_rsvp && $user_rsvp['status'] === 'cancelled') ? 'checked' : ''; ?>>
+                                            <label class="form-check-label">Cancelled</label>
                                         </div>
                                         <button type="submit" class="btn btn-primary w-100">Submit RSVP</button>
                                     </form>
