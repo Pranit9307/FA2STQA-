@@ -5,7 +5,7 @@ $password = '';
 
 try {
     // Connect to MySQL without selecting a database
-    $pdo = new PDO("mysql:host=$host", $username, $password);
+    $pdo = new PDO("mysql:host=$host;unix_socket=/opt/lampp/var/mysql/mysql.sock", $username, $password);
     $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
     
     // Create database
@@ -41,17 +41,21 @@ try {
     )");
     echo "Table 'events' created successfully!<br>";
     
-    // Create rsvps table
-    $pdo->exec("CREATE TABLE IF NOT EXISTS rsvps (
+    // Drop existing rsvps table if it exists
+    $pdo->exec("DROP TABLE IF EXISTS rsvps");
+    echo "Dropped existing 'rsvps' table<br>";
+    
+    // Create rsvps table with new enum values
+    $pdo->exec("CREATE TABLE rsvps (
         id INT PRIMARY KEY AUTO_INCREMENT,
         event_id INT,
         user_id INT,
-        status ENUM('confirmed', 'pending', 'cancelled') DEFAULT 'pending',
+        status ENUM('attending', 'maybe', 'not_attending') DEFAULT 'maybe',
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (event_id) REFERENCES events(id),
         FOREIGN KEY (user_id) REFERENCES users(id)
     )");
-    echo "Table 'rsvps' created successfully!<br>";
+    echo "Table 'rsvps' created successfully with new status values!<br>";
     
     echo "<br>All tables have been created successfully!<br>";
     echo "You can now <a href='index.php'>go to the homepage</a> and start using the system.";

@@ -2,54 +2,90 @@
 session_start();
 require_once 'config/database.php';
 
+// Check if send_mail.php exists and include it
+$email_sending_enabled = false;
+if (file_exists('send_mail.php')) {
+    require_once 'send_mail.php';
+    $email_sending_enabled = true;
+}
+
 // Handle RSVP
 if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['event_id']) && isset($_SESSION['user_id'])) {
     $event_id = (int)$_POST['event_id'];
     $user_id = $_SESSION['user_id'];
     
     // Check if already RSVP'd
-    $stmt = $pdo->prepare("SELECT COUNT(*) FROM rsvps WHERE event_id = ? AND user_id = ?");
+    $stmt = $pdo->prepare("SELECT id, status FROM rsvps WHERE event_id = ? AND user_id = ?");
     $stmt->execute([$event_id, $user_id]);
-    if ($stmt->fetchColumn() == 0) {
-        // Check event capacity
-        $stmt = $pdo->prepare("
-            SELECT e.capacity, COUNT(r.id) as current_rsvps 
-            FROM events e 
-            LEFT JOIN rsvps r ON e.id = r.event_id 
-            WHERE e.id = ?
-            GROUP BY e.id
-        ");
-        $stmt->execute([$event_id]);
-        $event = $stmt->fetch();
-        
-        if ($event['current_rsvps'] < $event['capacity']) {
-            // Create RSVP
-            $stmt = $pdo->prepare("INSERT INTO rsvps (event_id, user_id, status) VALUES (?, ?, 'confirmed')");
-            if ($stmt->execute([$event_id, $user_id])) {
-                // Send confirmation email
-                $stmt = $pdo->prepare("
-                    SELECT u.email, u.username, e.title, e.date, e.time, e.location 
-                    FROM users u 
-                    JOIN events e ON e.id = ? 
-                    WHERE u.id = ?
-                ");
-                $stmt->execute([$event_id, $user_id]);
-                $rsvp_info = $stmt->fetch();
-                
-                $to = $rsvp_info['email'];
-                $subject = "RSVP Confirmation - EventHub";
-                $message = "Dear {$rsvp_info['username']},\n\nYour RSVP for '{$rsvp_info['title']}' has been confirmed.\n\nEvent Details:\nDate: {$rsvp_info['date']}\nTime: {$rsvp_info['time']}\nLocation: {$rsvp_info['location']}\n\nBest regards,\nEventHub Team";
-                $headers = "From: noreply@eventhub.com";
-                
-                mail($to, $subject, $message, $headers);
-                
-                $_SESSION['success'] = "RSVP successful! Check your email for confirmation.";
-            }
+    $existing_rsvp = $stmt->fetch();
+    
+    // Check event capacity
+    $stmt = $pdo->prepare("
+        SELECT e.*, u.username as manager_name
+        FROM events e 
+        LEFT JOIN users u ON e.manager_id = u.id
+        WHERE e.id = ?
+    ");
+    $stmt->execute([$event_id]);
+    $event = $stmt->fetch();
+    
+    if (!$event) {
+        $_SESSION['error'] = "Event not found.";
+        header("Location: events.php");
+        exit();
+    }
+    
+    // Get current RSVP count
+    $stmt = $pdo->prepare("SELECT COUNT(*) FROM rsvps WHERE event_id = ? AND status = 'attending'");
+    $stmt->execute([$event_id]);
+    $current_rsvps = $stmt->fetchColumn();
+    
+    if ($current_rsvps >= $event['capacity'] && !$existing_rsvp) {
+        $_SESSION['error'] = "Sorry, this event is already at full capacity.";
+        header("Location: events.php");
+        exit();
+    }
+    
+    try {
+        if ($existing_rsvp) {
+            // Update existing RSVP
+            $stmt = $pdo->prepare("UPDATE rsvps SET status = 'attending' WHERE id = ?");
+            $stmt->execute([$existing_rsvp['id']]);
         } else {
-            $_SESSION['error'] = "Sorry, this event is already at full capacity.";
+            // Create new RSVP
+            $stmt = $pdo->prepare("INSERT INTO rsvps (event_id, user_id, status) VALUES (?, ?, 'attending')");
+            $stmt->execute([$event_id, $user_id]);
         }
-    } else {
-        $_SESSION['error'] = "You have already RSVP'd for this event.";
+        
+        // Send RSVP confirmation email if enabled
+        if ($email_sending_enabled) {
+            // Get user details for email
+            $user_stmt = $pdo->prepare("SELECT username, email FROM users WHERE id = ?");
+            $user_stmt->execute([$user_id]);
+            $user = $user_stmt->fetch();
+            
+            if ($user) {
+                // Format date and time for email
+                $formatted_date = date('F j, Y', strtotime($event['date']));
+                $formatted_time = date('g:i A', strtotime($event['time']));
+                
+                // Send RSVP confirmation email
+                sendRsvpEmail(
+                    $user['email'],
+                    $user['username'],
+                    $event['title'],
+                    $formatted_date,
+                    $formatted_time,
+                    $event['location'],
+                    'attending'
+                );
+            }
+        }
+        
+        $_SESSION['success'] = "RSVP successful! Check your email for confirmation.";
+    } catch (PDOException $e) {
+        error_log("Database error: " . $e->getMessage());
+        $_SESSION['error'] = "Failed to process RSVP. Please try again.";
     }
     
     header("Location: events.php");
@@ -59,7 +95,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['event_id']) && isset($
 // Get all events with RSVP count
 $stmt = $pdo->query("
     SELECT e.*, u.username as manager_name, 
-           COUNT(r.id) as rsvp_count 
+           COUNT(CASE WHEN r.status = 'attending' THEN 1 END) as rsvp_count 
     FROM events e 
     LEFT JOIN users u ON e.manager_id = u.id 
     LEFT JOIN rsvps r ON e.id = r.event_id 

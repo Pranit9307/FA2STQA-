@@ -161,7 +161,10 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                                                     <td><?php echo date('F j, Y', strtotime($rsvp['date'])); ?></td>
                                                     <td><?php echo date('g:i A', strtotime($rsvp['time'])); ?></td>
                                                     <td>
-                                                        <span class="badge bg-<?php echo $rsvp['rsvp_status'] == 'confirmed' ? 'success' : 'warning'; ?>">
+                                                        <span class="badge bg-<?php 
+                                                            echo ($rsvp['rsvp_status'] === 'attending') ? 'success' : 
+                                                                (($rsvp['rsvp_status'] === 'maybe') ? 'warning' : 'danger'); 
+                                                        ?>">
                                                             <?php echo ucfirst($rsvp['rsvp_status']); ?>
                                                         </span>
                                                     </td>
