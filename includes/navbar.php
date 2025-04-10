@@ -25,6 +25,16 @@ $current_page = basename($_SERVER['PHP_SELF']);
                         <i class="fas fa-calendar-week me-1"></i> Events
                     </a>
                 </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="nearby_events.php">
+                        <i class="fas fa-map-marker-alt"></i> Nearby Events
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="user_interests.php">
+                        <i class="fas fa-heart"></i> Interests & Recommendations
+                    </a>
+                </li>
                 <?php if (isset($_SESSION['user_id']) && $_SESSION['role'] == 'event_manager'): ?>
                 <li class="nav-item">
                     <a class="nav-link <?php echo $current_page == 'create_event.php' ? 'active' : ''; ?>" href="create_event.php">
@@ -80,6 +90,23 @@ $current_page = basename($_SERVER['PHP_SELF']);
                     <li class="nav-item">
                         <a class="nav-link <?php echo $current_page == 'register.php' ? 'active' : ''; ?>" href="register.php">
                             <i class="fas fa-user-plus me-1"></i> Register
+                        </a>
+                    </li>
+                <?php endif; ?>
+                <?php if (isset($_SESSION['role']) && $_SESSION['role'] === 'admin'): ?>
+                    <li class="nav-item">
+                        <a class="nav-link" href="admin_dashboard.php">
+                            <i class="fas fa-tachometer-alt"></i> Admin Dashboard
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="update_event_coordinates.php">
+                            <i class="fas fa-map-marker-alt"></i> Update Coordinates
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="check_events.php">
+                            <i class="fas fa-database"></i> Check Events
                         </a>
                     </li>
                 <?php endif; ?>

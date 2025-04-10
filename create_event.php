@@ -1,6 +1,7 @@
 <?php
 session_start();
 require_once 'config/database.php';
+require_once 'location_services.php'; // Include location services for geocoding
 
 // Check if user is logged in and is an event manager
 if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'event_manager') {
@@ -43,11 +44,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
 
+        // Get coordinates from location address
+        $coordinates = null;
+        if (!empty($_POST['location'])) {
+            $coordinates = getCoordinates($_POST['location']);
+        }
+
+        // Validate and sanitize price
+        $price = isset($_POST['price']) && $_POST['price'] !== '' ? floatval($_POST['price']) : 0.00;
+        if ($price < 0) {
+            $price = 0.00;
+        }
+
         // Insert event into database
         $stmt = $pdo->prepare("
             INSERT INTO events (title, description, date, time, location, image_path, is_featured, created_by,
-                              price, event_type, capacity, available_spots)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                              price, event_type, capacity, available_spots, latitude, longitude)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ");
         
         $stmt->execute([
@@ -59,10 +72,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $image_path,
             isset($_POST['is_featured']) ? 1 : 0,
             $_SESSION['user_id'],
-            $_POST['price'],
+            $price,
             $_POST['event_type'],
             $_POST['capacity'],
-            $_POST['capacity']  // Initially, available_spots equals capacity
+            $_POST['capacity'],  // Initially, available_spots equals capacity
+            $coordinates ? $coordinates['lat'] : null,
+            $coordinates ? $coordinates['lng'] : null
         ]);
         
         $event_id = $pdo->lastInsertId();
@@ -101,8 +116,43 @@ $tags = $pdo->query("SELECT * FROM tags ORDER BY name")->fetchAll();
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Create Event - EventHub</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <link rel="stylesheet" href="assets/css/style.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        #locationMap {
+            height: 300px;
+            width: 100%;
+            border-radius: 8px;
+            margin-top: 10px;
+            display: none;
+        }
+        #locationSuggestions {
+            position: absolute;
+            width: 100%;
+            max-height: 200px;
+            overflow-y: auto;
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 0 0 4px 4px;
+            z-index: 1000;
+            display: none;
+        }
+        .suggestion-item {
+            padding: 8px 12px;
+            cursor: pointer;
+            border-bottom: 1px solid #eee;
+        }
+        .suggestion-item:hover {
+            background-color: #f8f9fa;
+        }
+        .suggestion-item:last-child {
+            border-bottom: none;
+        }
+        .location-input-container {
+            position: relative;
+        }
+    </style>
 </head>
 <body>
     <?php include 'includes/navbar.php'; ?>
@@ -147,7 +197,15 @@ $tags = $pdo->query("SELECT * FROM tags ORDER BY name")->fetchAll();
                             
                             <div class="mb-3">
                                 <label for="location" class="form-label">Location</label>
-                                <input type="text" class="form-control" id="location" name="location" required>
+                                <div class="location-input-container">
+                                    <div class="input-group">
+                                        <span class="input-group-text"><i class="fas fa-map-marker-alt"></i></span>
+                                        <input type="text" class="form-control" id="location" name="location" required autocomplete="off">
+                                    </div>
+                                    <div id="locationSuggestions"></div>
+                                </div>
+                                <div id="locationMap"></div>
+                                <small class="text-muted">Enter a specific address for better map integration</small>
                             </div>
                             
                             <div class="row">
@@ -225,6 +283,133 @@ $tags = $pdo->query("SELECT * FROM tags ORDER BY name")->fetchAll();
     </div>
     
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="assets/js/main.js"></script>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        // Initialize map
+        let map;
+        let marker;
+        let debounceTimer;
+        
+        function initMap() {
+            map = L.map('locationMap').setView([0, 0], 2);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '© OpenStreetMap contributors'
+            }).addTo(map);
+        }
+        
+        // Function to fetch location suggestions
+        function fetchLocationSuggestions(query) {
+            if (query.length < 3) {
+                document.getElementById('locationSuggestions').style.display = 'none';
+                return;
+            }
+            
+            fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=5`)
+                .then(response => response.json())
+                .then(data => {
+                    const suggestionsContainer = document.getElementById('locationSuggestions');
+                    
+                    if (data.length === 0) {
+                        suggestionsContainer.style.display = 'none';
+                        return;
+                    }
+                    
+                    let html = '';
+                    data.forEach(place => {
+                        html += `<div class="suggestion-item" data-lat="${place.lat}" data-lon="${place.lon}" data-display="${place.display_name}">
+                            ${place.display_name}
+                        </div>`;
+                    });
+                    
+                    suggestionsContainer.innerHTML = html;
+                    suggestionsContainer.style.display = 'block';
+                    
+                    // Add click event to suggestion items
+                    document.querySelectorAll('.suggestion-item').forEach(item => {
+                        item.addEventListener('click', function() {
+                            const lat = this.getAttribute('data-lat');
+                            const lon = this.getAttribute('data-lon');
+                            const displayName = this.getAttribute('data-display');
+                            
+                            document.getElementById('location').value = displayName;
+                            suggestionsContainer.style.display = 'none';
+                            
+                            // Show map with selected location
+                            document.getElementById('locationMap').style.display = 'block';
+                            
+                            // Initialize map if not already initialized
+                            if (!map) {
+                                initMap();
+                            }
+                            
+                            // Update map view
+                            map.setView([lat, lon], 15);
+                            
+                            // Update or add marker
+                            if (marker) {
+                                marker.setLatLng([lat, lon]);
+                            } else {
+                                marker = L.marker([lat, lon]).addTo(map);
+                            }
+                        });
+                    });
+                })
+                .catch(error => console.error('Error fetching suggestions:', error));
+        }
+        
+        // Geocode location when user types in the location field
+        document.getElementById('location').addEventListener('input', function() {
+            const locationInput = this.value;
+            
+            // Clear previous timer
+            clearTimeout(debounceTimer);
+            
+            // Set a new timer to fetch suggestions after user stops typing
+            debounceTimer = setTimeout(() => {
+                fetchLocationSuggestions(locationInput);
+                
+                if (locationInput.length > 5) {
+                    // Show the map
+                    document.getElementById('locationMap').style.display = 'block';
+                    
+                    // Initialize map if not already initialized
+                    if (!map) {
+                        initMap();
+                    }
+                    
+                    // Geocode the address
+                    fetch('location_services.php', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/x-www-form-urlencoded',
+                        },
+                        body: 'get_coordinates=1&address=' + encodeURIComponent(locationInput)
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data && data.lat && data.lng) {
+                            // Update map view
+                            map.setView([data.lat, data.lng], 15);
+                            
+                            // Update or add marker
+                            if (marker) {
+                                marker.setLatLng([data.lat, data.lng]);
+                            } else {
+                                marker = L.marker([data.lat, data.lng]).addTo(map);
+                            }
+                        }
+                    })
+                    .catch(error => console.error('Error geocoding address:', error));
+                }
+            }, 300); // 300ms delay
+        });
+        
+        // Close suggestions when clicking outside
+        document.addEventListener('click', function(e) {
+            if (!e.target.closest('.location-input-container')) {
+                document.getElementById('locationSuggestions').style.display = 'none';
+            }
+        });
+    </script>
 </body>
 </html> 
