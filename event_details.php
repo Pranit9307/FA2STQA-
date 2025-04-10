@@ -22,6 +22,7 @@ $event_id = (int)$_GET['id'];
 $stmt = $pdo->prepare("
     SELECT e.*, u.username as manager_name,
            COUNT(r.id) as rsvp_count,
+           c.name as category_name,
            COALESCE(GROUP_CONCAT(
                CASE WHEN r.status = 'attending' 
                THEN u2.username 
@@ -31,8 +32,9 @@ $stmt = $pdo->prepare("
     LEFT JOIN users u ON e.manager_id = u.id
     LEFT JOIN rsvps r ON e.id = r.event_id
     LEFT JOIN users u2 ON r.user_id = u2.id
+    LEFT JOIN categories c ON e.category_id = c.id
     WHERE e.id = ?
-    GROUP BY e.id, e.title, e.description, e.date, e.time, e.location, e.capacity, e.manager_id, u.username
+    GROUP BY e.id, e.title, e.description, e.date, e.time, e.location, e.capacity, e.image_path, e.manager_id, u.username, c.name
 ");
 $stmt->execute([$event_id]);
 $event = $stmt->fetch();
@@ -42,6 +44,16 @@ if (!$event) {
     header("Location: events.php");
     exit();
 }
+
+// Get event tags
+$tag_stmt = $pdo->prepare("
+    SELECT t.name 
+    FROM tags t 
+    JOIN event_tags et ON t.id = et.tag_id 
+    WHERE et.event_id = ?
+");
+$tag_stmt->execute([$event_id]);
+$event_tags = $tag_stmt->fetchAll();
 
 // Generate CSRF token
 if (empty($_SESSION['csrf_token'])) {
@@ -163,6 +175,14 @@ if (isset($_SESSION['user_id'])) {
                 <h2 class="card-title"><?php echo htmlspecialchars($event['title']); ?></h2>
                 <p class="text-muted">Created by <?php echo htmlspecialchars($event['manager_name']); ?></p>
                 
+                <?php if ($event['image_path']): ?>
+                    <div class="event-image mb-4">
+                        <img src="<?php echo htmlspecialchars($event['image_path']); ?>" 
+                             alt="<?php echo htmlspecialchars($event['title']); ?>" 
+                             class="img-fluid rounded">
+                    </div>
+                <?php endif; ?>
+                
                 <div class="row mt-4">
                     <div class="col-md-8">
                         <h4>Description</h4>
@@ -174,6 +194,35 @@ if (isset($_SESSION['user_id'])) {
                             <li><strong>Time:</strong> <?php echo date('g:i A', strtotime($event['time'])); ?></li>
                             <li><strong>Location:</strong> <?php echo htmlspecialchars($event['location']); ?></li>
                             <li><strong>Capacity:</strong> <?php echo $event['rsvp_count']; ?>/<?php echo $event['capacity']; ?> spots filled</li>
+                            <li>
+                                <strong>Price:</strong>
+                                <?php if ($event['price'] > 0): ?>
+                                    ₹<?php echo number_format($event['price'], 2); ?>
+                                    <span class="badge bg-<?php echo $event['event_type'] === 'donation' ? 'warning' : 'success'; ?> ms-2">
+                                        <?php echo ucfirst($event['event_type']); ?>
+                                    </span>
+                                <?php else: ?>
+                                    Free
+                                <?php endif; ?>
+                            </li>
+                            <?php if ($event['category_name']): ?>
+                                <li>
+                                    <strong>Category:</strong>
+                                    <span class="badge bg-info">
+                                        <?php echo htmlspecialchars($event['category_name']); ?>
+                                    </span>
+                                </li>
+                            <?php endif; ?>
+                            <?php if (!empty($event_tags)): ?>
+                                <li>
+                                    <strong>Tags:</strong>
+                                    <?php foreach ($event_tags as $tag): ?>
+                                        <span class="badge bg-secondary me-1">
+                                            <?php echo htmlspecialchars($tag['name']); ?>
+                                        </span>
+                                    <?php endforeach; ?>
+                                </li>
+                            <?php endif; ?>
                         </ul>
                     </div>
                     

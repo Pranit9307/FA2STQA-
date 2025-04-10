@@ -31,6 +31,11 @@ $current_page = basename($_SERVER['PHP_SELF']);
                         <i class="fas fa-plus-circle me-1"></i> Create Event
                     </a>
                 </li>
+                <li class="nav-item">
+                    <a class="nav-link <?php echo $current_page == 'event_analytics.php' ? 'active' : ''; ?>" href="event_analytics.php">
+                        <i class="fas fa-chart-bar me-1"></i> Analytics
+                    </a>
+                </li>
                 <?php endif; ?>
             </ul>
             

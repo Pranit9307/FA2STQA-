@@ -8,48 +8,91 @@ if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'event_manager') {
     exit();
 }
 
-if ($_SERVER['REQUEST_METHOD'] == 'POST') {
-    $title = trim($_POST['title']);
-    $description = trim($_POST['description']);
-    $date = $_POST['date'];
-    $time = $_POST['time'];
-    $location = trim($_POST['location']);
-    $capacity = (int)$_POST['capacity'];
-    $manager_id = $_SESSION['user_id'];
-    
-    $errors = [];
-    
-    if (empty($title)) $errors[] = "Title is required";
-    if (empty($description)) $errors[] = "Description is required";
-    if (empty($date)) $errors[] = "Date is required";
-    if (empty($time)) $errors[] = "Time is required";
-    if (empty($location)) $errors[] = "Location is required";
-    if ($capacity <= 0) $errors[] = "Capacity must be greater than 0";
-    
-    if (empty($errors)) {
-        $stmt = $pdo->prepare("INSERT INTO events (title, description, date, time, location, capacity, manager_id) VALUES (?, ?, ?, ?, ?, ?, ?)");
-        
-        if ($stmt->execute([$title, $description, $date, $time, $location, $capacity, $manager_id])) {
-            // Send confirmation email to event manager
-            $stmt = $pdo->prepare("SELECT email FROM users WHERE id = ?");
-            $stmt->execute([$manager_id]);
-            $manager_email = $stmt->fetchColumn();
+$error = '';
+$success = '';
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    try {
+        // Handle image upload
+        $image_path = null;
+        if (isset($_FILES['event_image']) && $_FILES['event_image']['error'] === UPLOAD_ERR_OK) {
+            $allowed_types = ['image/jpeg', 'image/png', 'image/gif'];
+            $max_size = 5 * 1024 * 1024; // 5MB
             
-            $to = $manager_email;
-            $subject = "Event Created Successfully - EventHub";
-            $message = "Dear Event Manager,\n\nYour event '$title' has been successfully created on EventHub.\n\nEvent Details:\nDate: $date\nTime: $time\nLocation: $location\nCapacity: $capacity\n\nBest regards,\nEventHub Team";
-            $headers = "From: noreply@eventhub.com";
+            if (!in_array($_FILES['event_image']['type'], $allowed_types)) {
+                throw new Exception('Invalid file type. Only JPEG, PNG, and GIF images are allowed.');
+            }
             
-            mail($to, $subject, $message, $headers);
+            if ($_FILES['event_image']['size'] > $max_size) {
+                throw new Exception('File size too large. Maximum size is 5MB.');
+            }
             
-            $_SESSION['success'] = "Event created successfully!";
-            header("Location: my_events.php");
-            exit();
-        } else {
-            $errors[] = "Failed to create event. Please try again.";
+            // Create uploads directory if it doesn't exist
+            if (!file_exists('uploads/events')) {
+                mkdir('uploads/events', 0777, true);
+            }
+            
+            $file_extension = pathinfo($_FILES['event_image']['name'], PATHINFO_EXTENSION);
+            $file_name = uniqid() . '.' . $file_extension;
+            $upload_path = 'uploads/events/' . $file_name;
+            
+            if (move_uploaded_file($_FILES['event_image']['tmp_name'], $upload_path)) {
+                $image_path = $upload_path;
+            } else {
+                throw new Exception('Failed to upload image.');
+            }
         }
+
+        // Insert event into database
+        $stmt = $pdo->prepare("
+            INSERT INTO events (title, description, date, time, location, image_path, is_featured, created_by,
+                              price, event_type, capacity, available_spots)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ");
+        
+        $stmt->execute([
+            $_POST['title'],
+            $_POST['description'],
+            $_POST['date'],
+            $_POST['time'],
+            $_POST['location'],
+            $image_path,
+            isset($_POST['is_featured']) ? 1 : 0,
+            $_SESSION['user_id'],
+            $_POST['price'],
+            $_POST['event_type'],
+            $_POST['capacity'],
+            $_POST['capacity']  // Initially, available_spots equals capacity
+        ]);
+        
+        $event_id = $pdo->lastInsertId();
+        
+        // Handle category
+        if (isset($_POST['category_id'])) {
+            $stmt = $pdo->prepare("UPDATE events SET category_id = ? WHERE id = ?");
+            $stmt->execute([$_POST['category_id'], $event_id]);
+        }
+        
+        // Handle tags
+        if (isset($_POST['tags']) && is_array($_POST['tags'])) {
+            $stmt = $pdo->prepare("INSERT INTO event_tags (event_id, tag_id) VALUES (?, ?)");
+            foreach ($_POST['tags'] as $tag_id) {
+                $stmt->execute([$event_id, $tag_id]);
+            }
+        }
+        
+        $success = 'Event created successfully!';
+        header("Location: event_details.php?id=" . $event_id);
+        exit();
+        
+    } catch (Exception $e) {
+        $error = $e->getMessage();
     }
 }
+
+// Fetch categories and tags for the form
+$categories = $pdo->query("SELECT * FROM categories ORDER BY name")->fetchAll();
+$tags = $pdo->query("SELECT * FROM tags ORDER BY name")->fetchAll();
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -71,17 +114,15 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                     <div class="card-body p-5">
                         <h2 class="text-center mb-4">Create New Event</h2>
                         
-                        <?php if (!empty($errors)): ?>
-                            <div class="alert alert-danger">
-                                <ul class="mb-0">
-                                    <?php foreach ($errors as $error): ?>
-                                        <li><?php echo htmlspecialchars($error); ?></li>
-                                    <?php endforeach; ?>
-                                </ul>
-                            </div>
+                        <?php if ($error): ?>
+                            <div class="alert alert-danger"><?php echo $error; ?></div>
                         <?php endif; ?>
                         
-                        <form method="POST" action="" class="needs-validation" novalidate>
+                        <?php if ($success): ?>
+                            <div class="alert alert-success"><?php echo $success; ?></div>
+                        <?php endif; ?>
+                        
+                        <form method="POST" enctype="multipart/form-data" class="needs-validation" novalidate>
                             <div class="mb-3">
                                 <label for="title" class="form-label">Event Title</label>
                                 <input type="text" class="form-control" id="title" name="title" required>
@@ -109,9 +150,70 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
                                 <input type="text" class="form-control" id="location" name="location" required>
                             </div>
                             
-                            <div class="mb-4">
-                                <label for="capacity" class="form-label">Capacity</label>
-                                <input type="number" class="form-control" id="capacity" name="capacity" min="1" required>
+                            <div class="row">
+                                <div class="col-md-4 mb-3">
+                                    <label for="price" class="form-label">Price</label>
+                                    <div class="input-group">
+                                        <span class="input-group-text">₹</span>
+                                        <input type="number" class="form-control" id="price" name="price" 
+                                               min="0" step="0.01" value="0" required>
+                                    </div>
+                                </div>
+                                
+                                <div class="col-md-4 mb-3">
+                                    <label for="event_type" class="form-label">Event Type</label>
+                                    <select class="form-select" id="event_type" name="event_type" required>
+                                        <option value="free">Free</option>
+                                        <option value="paid">Paid</option>
+                                        <option value="donation">Donation</option>
+                                    </select>
+                                </div>
+                                
+                                <div class="col-md-4 mb-3">
+                                    <label for="capacity" class="form-label">Capacity</label>
+                                    <input type="number" class="form-control" id="capacity" name="capacity" 
+                                           min="1" value="100" required>
+                                </div>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label for="event_image" class="form-label">Event Image</label>
+                                <input type="file" class="form-control" id="event_image" name="event_image" accept="image/*">
+                                <div class="form-text">Upload a JPEG, PNG, or GIF image (max 5MB)</div>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label for="category_id" class="form-label">Category</label>
+                                <select class="form-select" id="category_id" name="category_id" required>
+                                    <option value="">Select a category</option>
+                                    <?php foreach ($categories as $category): ?>
+                                        <option value="<?php echo $category['id']; ?>">
+                                            <?php echo htmlspecialchars($category['name']); ?>
+                                        </option>
+                                    <?php endforeach; ?>
+                                </select>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label class="form-label">Tags</label>
+                                <div class="row">
+                                    <?php foreach ($tags as $tag): ?>
+                                        <div class="col-md-4">
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="checkbox" name="tags[]" 
+                                                       value="<?php echo $tag['id']; ?>" id="tag<?php echo $tag['id']; ?>">
+                                                <label class="form-check-label" for="tag<?php echo $tag['id']; ?>">
+                                                    <?php echo htmlspecialchars($tag['name']); ?>
+                                                </label>
+                                            </div>
+                                        </div>
+                                    <?php endforeach; ?>
+                                </div>
+                            </div>
+                            
+                            <div class="mb-3 form-check">
+                                <input type="checkbox" class="form-check-input" id="is_featured" name="is_featured">
+                                <label class="form-check-label" for="is_featured">Feature this event</label>
                             </div>
                             
                             <button type="submit" class="btn btn-primary w-100">Create Event</button>
