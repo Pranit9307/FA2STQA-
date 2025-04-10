@@ -186,7 +186,7 @@ if (isset($_SESSION['user_id'])) {
 }
 
 // Check if user is the event manager
-$is_manager = isset($_SESSION['user_id']) && $event['manager_id'] == $_SESSION['user_id'];
+$is_manager = isset($_SESSION['user_id']) && ($event['manager_id'] == $_SESSION['user_id'] || $event['created_by'] == $_SESSION['user_id']);
 ?>
 <!DOCTYPE html>
 <html lang="en">

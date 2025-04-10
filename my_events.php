@@ -8,17 +8,33 @@ if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'event_manager') {
     exit();
 }
 
-// Get events created by the manager
-$stmt = $pdo->prepare("
-    SELECT e.*, COUNT(r.id) as rsvp_count 
-    FROM events e 
-    LEFT JOIN rsvps r ON e.id = r.event_id 
-    WHERE e.manager_id = ? 
-    GROUP BY e.id 
-    ORDER BY e.date ASC, e.time ASC
-");
-$stmt->execute([$_SESSION['user_id']]);
-$events = $stmt->fetchAll();
+// Get events created by the manager with improved query
+try {
+    $stmt = $pdo->prepare("
+        SELECT 
+            e.*,
+            COUNT(DISTINCT r.id) as rsvp_count,
+            c.name as category_name,
+            GROUP_CONCAT(DISTINCT t.name) as tags
+        FROM events e 
+        LEFT JOIN rsvps r ON e.id = r.event_id 
+        LEFT JOIN categories c ON e.category_id = c.id
+        LEFT JOIN event_tags et ON e.id = et.event_id
+        LEFT JOIN tags t ON et.tag_id = t.id
+        WHERE e.manager_id = ? OR e.created_by = ? 
+        GROUP BY e.id, e.title, e.description, e.date, e.time, e.location, e.capacity, e.price, e.event_type, e.category_id, c.name
+        ORDER BY e.date ASC, e.time ASC
+    ");
+    $stmt->execute([$_SESSION['user_id'], $_SESSION['user_id']]);
+    $events = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    
+    // Debug information
+    error_log("User ID: " . $_SESSION['user_id']);
+    error_log("Number of events found: " . count($events));
+} catch (PDOException $e) {
+    error_log("Database error: " . $e->getMessage());
+    $events = [];
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -57,6 +73,9 @@ $events = $stmt->fetchAll();
                 <?php foreach ($events as $event): ?>
                     <div class="col-md-4 mb-4">
                         <div class="card h-100 animate__animated animate__fadeIn">
+                            <?php if (!empty($event['image_path'])): ?>
+                                <img src="<?php echo htmlspecialchars($event['image_path']); ?>" class="card-img-top" alt="Event Image">
+                            <?php endif; ?>
                             <div class="card-body">
                                 <h5 class="card-title"><?php echo htmlspecialchars($event['title']); ?></h5>
                                 <p class="card-text"><?php echo htmlspecialchars($event['description']); ?></p>
@@ -65,9 +84,19 @@ $events = $stmt->fetchAll();
                                         <strong>Date:</strong> <?php echo date('F j, Y', strtotime($event['date'])); ?><br>
                                         <strong>Time:</strong> <?php echo date('g:i A', strtotime($event['time'])); ?><br>
                                         <strong>Location:</strong> <?php echo htmlspecialchars($event['location']); ?><br>
+                                        <strong>Category:</strong> <?php echo htmlspecialchars($event['category_name'] ?? 'Uncategorized'); ?><br>
+                                        <strong>Type:</strong> <?php echo ucfirst($event['event_type']); ?><br>
+                                        <strong>Price:</strong> $<?php echo number_format($event['price'], 2); ?><br>
                                         <strong>RSVPs:</strong> <?php echo $event['rsvp_count']; ?>/<?php echo $event['capacity']; ?>
                                     </small>
                                 </p>
+                                <?php if (!empty($event['tags'])): ?>
+                                    <p class="card-text">
+                                        <small class="text-muted">
+                                            <strong>Tags:</strong> <?php echo htmlspecialchars($event['tags']); ?>
+                                        </small>
+                                    </p>
+                                <?php endif; ?>
                                 <a href="event_details.php?id=<?php echo $event['id']; ?>" class="btn btn-primary">View Details</a>
                             </div>
                         </div>

@@ -23,11 +23,11 @@ $stats_query = $pdo->prepare("
         (COUNT(DISTINCT CASE WHEN r.status = 'confirmed' THEN r.id END) * e.price) as revenue
     FROM events e
     LEFT JOIN rsvps r ON e.id = r.event_id
-    WHERE e.manager_id = ?
+    WHERE e.manager_id = ? OR e.created_by = ?
     GROUP BY e.id, e.title, e.date, e.time, e.capacity, e.price
     ORDER BY e.date DESC
 ");
-$stats_query->execute([$_SESSION['user_id']]);
+$stats_query->execute([$_SESSION['user_id'], $_SESSION['user_id']]);
 $events_stats = $stats_query->fetchAll();
 
 // Get popular time slots
@@ -38,11 +38,11 @@ $time_slots_query = $pdo->prepare("
         AVG(CASE WHEN r.status = 'confirmed' THEN 1 ELSE 0 END) as avg_attendance_rate
     FROM events e
     LEFT JOIN rsvps r ON e.id = r.event_id
-    WHERE e.manager_id = ?
+    WHERE e.manager_id = ? OR e.created_by = ?
     GROUP BY HOUR(time)
     ORDER BY event_count DESC
 ");
-$time_slots_query->execute([$_SESSION['user_id']]);
+$time_slots_query->execute([$_SESSION['user_id'], $_SESSION['user_id']]);
 $time_slots = $time_slots_query->fetchAll();
 
 // Get monthly revenue
@@ -53,11 +53,11 @@ $monthly_revenue_query = $pdo->prepare("
         COUNT(DISTINCT e.id) as event_count
     FROM events e
     LEFT JOIN rsvps r ON e.id = r.event_id
-    WHERE e.manager_id = ? AND e.date >= DATE_SUB(CURRENT_DATE, INTERVAL 12 MONTH)
+    WHERE (e.manager_id = ? OR e.created_by = ?) AND e.date >= DATE_SUB(CURRENT_DATE, INTERVAL 12 MONTH)
     GROUP BY DATE_FORMAT(e.date, '%Y-%m')
     ORDER BY month ASC
 ");
-$monthly_revenue_query->execute([$_SESSION['user_id']]);
+$monthly_revenue_query->execute([$_SESSION['user_id'], $_SESSION['user_id']]);
 $monthly_revenue = $monthly_revenue_query->fetchAll();
 
 // Calculate overall statistics
