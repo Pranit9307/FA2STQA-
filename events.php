@@ -329,7 +329,7 @@ $tags = $pdo->query("SELECT * FROM tags ORDER BY name")->fetchAll();
         <div class="row">
             <?php foreach ($events as $event): ?>
                 <div class="col-md-4 mb-4">
-                    <div class="card h-100 animate-fade-in">
+                    <div class="card h-100 animate-fade-in" style="cursor: pointer;" onclick="window.location.href='event_details.php?id=<?php echo $event['id']; ?>'">
                         <div class="card-body">
                             <div class="d-flex justify-content-between align-items-center mb-3">
                                 <h5 class="card-title mb-0"><?php echo htmlspecialchars($event['title']); ?></h5>
@@ -396,17 +396,6 @@ $tags = $pdo->query("SELECT * FROM tags ORDER BY name")->fetchAll();
                                         </span>
                                     <?php endforeach; ?>
                                 </div>
-                                
-                                <?php if (isset($_SESSION['user_id']) && $_SESSION['role'] == 'attendant'): ?>
-                                    <form method="POST" action="" class="mb-0">
-                                        <input type="hidden" name="event_id" value="<?php echo $event['id']; ?>">
-                                        <button type="submit" class="btn btn-primary" 
-                                            <?php echo $event['rsvp_count'] >= $event['capacity'] ? 'disabled' : ''; ?>>
-                                            <i class="fas fa-check-circle me-2"></i>
-                                            <?php echo $event['rsvp_count'] >= $event['capacity'] ? 'Full' : 'RSVP'; ?>
-                                        </button>
-                                    </form>
-                                <?php endif; ?>
                             </div>
                         </div>
                     </div>

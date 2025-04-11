@@ -526,4 +526,25 @@ body {
 .footer-copyright {
     color: rgba(255, 255, 255, 0.6);
     font-size: 0.9rem;
+}
+
+.edit-profile-btn:hover {
+    background: #000DFF;
+    color: white;
+}
+
+/* Dark mode styles */
+[data-bs-theme="dark"] .profile-section {
+    background: #343a40;
+    color: #f8f9fa;
+}
+
+[data-bs-theme="dark"] .edit-profile-btn {
+    background: #495057;
+    color: #f8f9fa;
+}
+
+[data-bs-theme="dark"] .edit-profile-btn:hover {
+    background: #6c757d;
+    color: #fff;
 } 

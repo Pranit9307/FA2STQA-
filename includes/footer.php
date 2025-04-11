@@ -7,12 +7,6 @@ $current_year = date('Y');
             <div class="col-lg-6 mb-4 mb-lg-0">
                 <h5 class="footer-title mb-4">EventHub</h5>
                 <p class="footer-text">Your one-stop platform for discovering and managing events. Connect with event enthusiasts and create memorable experiences.</p>
-                <div class="social-links mt-4">
-                    <a href="#" class="social-link"><i class="fab fa-facebook-f"></i></a>
-                    <a href="#" class="social-link"><i class="fab fa-twitter"></i></a>
-                    <a href="#" class="social-link"><i class="fab fa-instagram"></i></a>
-                    <a href="#" class="social-link"><i class="fab fa-linkedin-in"></i></a>
-                </div>
             </div>
             
             <div class="col-lg-3 col-md-6 mb-4 mb-md-0">

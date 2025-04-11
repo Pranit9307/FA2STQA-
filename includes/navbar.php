@@ -63,11 +63,13 @@ $current_page = basename($_SERVER['PHP_SELF']);
                                     <i class="fas fa-user me-2"></i> Profile
                                 </a>
                             </li>
+                            <?php if ($_SESSION['role'] === 'event_manager'): ?>
                             <li>
                                 <a class="dropdown-item" href="my_events.php">
                                     <i class="fas fa-calendar-check me-2"></i> My Events
                                 </a>
                             </li>
+                            <?php endif; ?>
                             <li>
                                 <a class="dropdown-item" href="my_rsvps.php">
                                     <i class="fas fa-ticket-alt me-2"></i> My RSVPs

@@ -11,10 +11,10 @@ function getGoogleCalendarUrl($event) {
     
     $params = array(
         'action' => 'TEMPLATE',
-        'text' => urlencode($event['title']),
+        'text' => $event['title'],
         'dates' => $start_date . '/' . $end_date,
-        'details' => urlencode($event['description']),
-        'location' => urlencode($event['location']),
+        'details' => $event['description'],
+        'location' => $event['location'],
         'sf' => 'true',
         'output' => 'xml'
     );
