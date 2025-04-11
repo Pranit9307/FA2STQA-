@@ -20,6 +20,9 @@ $user_interests = $stmt->fetchAll(PDO::FETCH_COLUMN);
 // Get recommended events
 require_once 'social_features.php';
 $recommendations = getEventRecommendations($pdo, $_SESSION['user_id']);
+
+// Debug log
+error_log("Recommendations in user_interests.php: " . print_r($recommendations, true));
 ?>
 
 <!DOCTYPE html>
@@ -63,44 +66,48 @@ $recommendations = getEventRecommendations($pdo, $_SESSION['user_id']);
                 <div class="card">
                     <div class="card-body">
                         <h5 class="card-title">Recommended Events</h5>
-                        <?php if (empty($recommendations)): ?>
-                        <p class="text-muted">No recommendations available. Please select your interests to get personalized recommendations.</p>
+                        <?php if (empty($user_interests)): ?>
+                            <p class="text-muted">Please select your interests to get personalized recommendations.</p>
                         <?php else: ?>
-                        <div class="row">
-                            <?php foreach ($recommendations as $event): ?>
-                            <div class="col-md-6 mb-4">
-                                <div class="card h-100">
-                                    <?php if ($event['image_path']): ?>
-                                    <img src="<?php echo htmlspecialchars($event['image_path']); ?>" 
-                                         class="card-img-top" alt="<?php echo htmlspecialchars($event['title']); ?>"
-                                         style="height: 200px; object-fit: cover;">
-                                    <?php endif; ?>
-                                    <div class="card-body">
-                                        <h5 class="card-title"><?php echo htmlspecialchars($event['title']); ?></h5>
-                                        <p class="card-text">
-                                            <small class="text-muted">
-                                                <i class="fas fa-calendar"></i> <?php echo date('M d, Y', strtotime($event['date'])); ?><br>
-                                                <i class="fas fa-map-marker-alt"></i> <?php echo htmlspecialchars($event['location']); ?><br>
-                                                <i class="fas fa-tag"></i> <?php echo htmlspecialchars($event['category_name']); ?>
-                                            </small>
-                                        </p>
-                                        <?php if ($event['avg_rating']): ?>
-                                        <div class="text-warning mb-2">
-                                            <?php
-                                            $rating = round($event['avg_rating']);
-                                            for ($i = 0; $i < 5; $i++) {
-                                                echo $i < $rating ? '<i class="fas fa-star"></i>' : '<i class="far fa-star"></i>';
-                                            }
-                                            ?>
-                                            <small class="text-muted">(<?php echo number_format($event['avg_rating'], 1); ?>)</small>
+                            <?php if (empty($recommendations)): ?>
+                                <p class="text-muted">No events available in your selected categories at the moment.</p>
+                            <?php else: ?>
+                                <div class="row">
+                                    <?php foreach ($recommendations as $event): ?>
+                                    <div class="col-md-6 mb-4">
+                                        <div class="card h-100">
+                                            <?php if (!empty($event['image_path'])): ?>
+                                            <img src="<?php echo htmlspecialchars($event['image_path']); ?>" 
+                                                 class="card-img-top" alt="<?php echo htmlspecialchars($event['title']); ?>"
+                                                 style="height: 200px; object-fit: cover;">
+                                            <?php endif; ?>
+                                            <div class="card-body">
+                                                <h5 class="card-title"><?php echo htmlspecialchars($event['title']); ?></h5>
+                                                <p class="card-text">
+                                                    <small class="text-muted">
+                                                        <i class="fas fa-calendar"></i> <?php echo date('M d, Y', strtotime($event['date'])); ?><br>
+                                                        <i class="fas fa-map-marker-alt"></i> <?php echo htmlspecialchars($event['location']); ?><br>
+                                                        <i class="fas fa-tag"></i> <?php echo htmlspecialchars($event['category_name']); ?>
+                                                    </small>
+                                                </p>
+                                                <?php if (isset($event['avg_rating']) && $event['avg_rating'] > 0): ?>
+                                                <div class="text-warning mb-2">
+                                                    <?php
+                                                    $rating = round($event['avg_rating']);
+                                                    for ($i = 0; $i < 5; $i++) {
+                                                        echo $i < $rating ? '<i class="fas fa-star"></i>' : '<i class="far fa-star"></i>';
+                                                    }
+                                                    ?>
+                                                    <small class="text-muted">(<?php echo number_format($event['avg_rating'], 1); ?>)</small>
+                                                </div>
+                                                <?php endif; ?>
+                                                <a href="event_details.php?id=<?php echo $event['id']; ?>" class="btn btn-primary">View Details</a>
+                                            </div>
                                         </div>
-                                        <?php endif; ?>
-                                        <a href="event_details.php?id=<?php echo $event['id']; ?>" class="btn btn-primary">View Details</a>
                                     </div>
+                                    <?php endforeach; ?>
                                 </div>
-                            </div>
-                            <?php endforeach; ?>
-                        </div>
+                            <?php endif; ?>
                         <?php endif; ?>
                     </div>
                 </div>

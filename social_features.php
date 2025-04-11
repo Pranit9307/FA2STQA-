@@ -60,27 +60,54 @@ if (isset($_POST['update_interests'])) {
 
 // Get event recommendations based on user interests
 function getEventRecommendations($pdo, $user_id) {
-    $stmt = $pdo->prepare("
-        SELECT DISTINCT e.*, u.username as manager_name, c.name as category_name,
+    // First, get user's interests
+    $stmt = $pdo->prepare("SELECT category_id FROM user_interests WHERE user_id = ?");
+    $stmt->execute([$user_id]);
+    $user_interests = $stmt->fetchAll(PDO::FETCH_COLUMN);
+
+    // Debug log
+    error_log("User interests: " . print_r($user_interests, true));
+
+    // If no interests selected, return empty array
+    if (empty($user_interests)) {
+        return [];
+    }
+
+    // Build the query with placeholders for interests
+    $placeholders = str_repeat('?,', count($user_interests) - 1) . '?';
+    $query = "
+        SELECT e.*, c.name as category_name,
                COUNT(DISTINCT r.id) as rsvp_count,
-               AVG(er.rating) as avg_rating
+               COALESCE(AVG(er.rating), 0) as avg_rating
         FROM events e
-        JOIN users u ON e.manager_id = u.id
         JOIN categories c ON e.category_id = c.id
         LEFT JOIN rsvps r ON e.id = r.event_id
         LEFT JOIN event_ratings er ON e.id = er.event_id
-        WHERE e.category_id IN (
-            SELECT category_id 
-            FROM user_interests 
-            WHERE user_id = ?
-        )
-        AND e.date >= CURDATE()
+        WHERE e.date >= CURDATE()
+        AND e.category_id IN ($placeholders)
         GROUP BY e.id
-        ORDER BY avg_rating DESC, rsvp_count DESC
-        LIMIT 5
-    ");
-    $stmt->execute([$user_id]);
-    return $stmt->fetchAll(PDO::FETCH_ASSOC);
+        ORDER BY e.date ASC, avg_rating DESC
+        LIMIT 10
+    ";
+
+    // Debug log
+    error_log("Query: " . $query);
+    error_log("Parameters: " . print_r($user_interests, true));
+
+    try {
+        $stmt = $pdo->prepare($query);
+        $stmt->execute($user_interests);
+        $results = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        
+        // Debug log
+        error_log("Number of results: " . count($results));
+        error_log("Results: " . print_r($results, true));
+        
+        return $results;
+    } catch (PDOException $e) {
+        error_log("Error in getEventRecommendations: " . $e->getMessage());
+        return [];
+    }
 }
 
 // Get social sharing links
